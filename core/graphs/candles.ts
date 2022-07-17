@@ -164,7 +164,12 @@ export class CandlesGraph extends Graph {
   }
 
   wheelHandler(e: any) {
-    this.zoomGraph(e.wheelDeltaY > 1 ? 1 : -1)
+    let cs = this.candlesSpace
+    let wd = e.wheelDeltaY
+    if (wd < 0 && cs < 1.7) return
+    if (wd > 0 && cs > 350) return
+
+    this.zoomGraph(wd > 1 ? 1 : -1)
     this.movePointer()
     this.draw()
   }
