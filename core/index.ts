@@ -1,5 +1,3 @@
-import { TContainer } from '../types'
-
 export default abstract class Graph {
   container: HTMLElement | undefined
 
@@ -8,15 +6,13 @@ export default abstract class Graph {
   xAxisContext: CanvasRenderingContext2D
 
   zoomSpeed: number = 4
-  pixelRatio: number = 0
 
   constructor(container: HTMLElement | string) {
     this.graphContext = document.createElement('canvas').getContext('2d')!
     this.yAxisContext = document.createElement('canvas').getContext('2d')!
     this.xAxisContext = document.createElement('canvas').getContext('2d')!
 
-    this.pixelRatio = this.getPixelRatio(this.graphContext)
-    this.graphContext.lineWidth = 1 * this.pixelRatio
+    this.graphContext.lineWidth = 1 * this.getPixelRatio(this.graphContext)
 
     if (typeof container === 'string') {
       this.container = document.querySelector<HTMLElement>(container)!
@@ -31,16 +27,10 @@ export default abstract class Graph {
       this.container.style.grid = '1fr 28px / 1fr 70px'
     }
 
-    this.createChartMarkup(this.container)
-    this.bindMouseListeners()
-    this.bindYAxisListeners()
-
-    this.rescale(this.graphContext)
-    this.rescale(this.yAxisContext)
-    this.rescale(this.xAxisContext)
+    this.createChartMarkup()
   }
 
-  createGraph(container: TContainer) {
+  createGraph(): HTMLCanvasElement {
     let canvas = this.graphContext.canvas
 
     const preventDefault = function (e: Event) {
@@ -51,43 +41,50 @@ export default abstract class Graph {
     canvas.oncontextmenu = preventDefault
     canvas.onwheel = preventDefault
 
+    canvas.style.gridArea = '1 / 1 / 2 / 2'
+    canvas.style.width = '100%'
+    canvas.style.height = '100%'
+    canvas.style.cursor = 'crosshair'
+
+    this.rescale(this.graphContext)
+    this.bindMouseListeners()
+
     return canvas
   }
 
-  createXAxis() {
+  createXAxis(): HTMLCanvasElement {
     let canvas = this.xAxisContext.canvas
     let ctx = canvas.getContext('2d')!
 
     this.xAxisContext = ctx
 
+    canvas.style.gridArea = '2 / 1 / 3 / 3'
+    canvas.style.width = '100%'
+    canvas.style.height = '28px'
+
     return canvas
   }
 
-  createYAxis() {
+  createYAxis(): HTMLCanvasElement {
     let canvas = this.yAxisContext.canvas
     let ctx = canvas.getContext('2d')!
 
     this.yAxisContext = ctx
 
+    canvas.style.gridArea = '1 / 2 / 2 / 3'
+    canvas.style.width = '70px'
+    canvas.style.height = '100%'
+    canvas.style.cursor = 'n-resize'
+
+    this.bindYAxisListeners()
+
     return canvas
   }
 
-  createChartMarkup(container: TContainer) {
-    let graphCanvas = this.createGraph(container)
+  createChartMarkup() {
+    let graphCanvas = this.createGraph()
     let yAxisCanvas = this.createYAxis()
     let xAxisCanvas = this.createXAxis()
-
-    graphCanvas.style.gridArea = '1 / 1 / 2 / 2'
-    graphCanvas.style.width = '100%'
-    graphCanvas.style.height = '100%'
-
-    xAxisCanvas.style.gridArea = '2 / 1 / 3 / 3'
-    xAxisCanvas.style.width = '100%'
-    xAxisCanvas.style.height = '28px'
-
-    yAxisCanvas.style.gridArea = '1 / 2 / 2 / 3'
-    yAxisCanvas.style.width = '70px'
-    yAxisCanvas.style.height = '100%'
 
     let rect = this.container!.getBoundingClientRect()
 
@@ -100,6 +97,9 @@ export default abstract class Graph {
     this.container!.appendChild(graphCanvas)
     this.container!.appendChild(xAxisCanvas)
     this.container!.appendChild(yAxisCanvas)
+
+    this.rescale(this.graphContext)
+    this.rescale(this.yAxisContext)
   }
 
   abstract mouseMoveHandler(e?: MouseEvent): void
@@ -109,7 +109,9 @@ export default abstract class Graph {
   abstract mouseUpHandler(e?: MouseEvent): void
   abstract wheelHandler(e?: WheelEvent): void
 
-  abstract yAxisWheelHandler(e?: WheelEvent): void
+  abstract yAxisMouseMoveHandler(e?: MouseEvent): void
+  abstract yAxisMouseDownHandler(e?: MouseEvent): void
+  abstract yAxisMouseUpHandler(e?: MouseEvent): void
 
   bindMouseListeners() {
     let canvas = this.graphContext.canvas
@@ -123,18 +125,32 @@ export default abstract class Graph {
 
   bindYAxisListeners() {
     let canvas = this.yAxisContext.canvas
-    // canvas.addEventListener('mousemove', (e) => this.mouseMoveHandler(e))
-    // canvas.addEventListener('mousedown', (e) => this.mouseDownHandler(e))
-    // canvas.addEventListener('mouseup', (e) => this.mouseUpHandler(e))
-    canvas.addEventListener('wheel', (e) => this.yAxisWheelHandler(e))
+    canvas.addEventListener('mousemove', (e) => this.yAxisMouseMoveHandler(e))
+    canvas.addEventListener('mousedown', (e) => this.yAxisMouseDownHandler(e))
+    canvas.addEventListener('mouseup', (e) => this.yAxisMouseUpHandler(e))
+    canvas.addEventListener('mouseleave', (e) => this.yAxisMouseUpHandler(e))
+  }
+
+  getWidth(ctx: CanvasRenderingContext2D) {
+    return ctx.canvas.clientWidth * this.getPixelRatio(ctx)
+  }
+
+  getHeight(ctx: CanvasRenderingContext2D) {
+    return ctx.canvas.clientHeight * this.getPixelRatio(ctx)
   }
 
   get width() {
-    return this.graphContext.canvas.clientWidth * this.pixelRatio
+    return (
+      this.graphContext.canvas.clientWidth *
+      this.getPixelRatio(this.graphContext)
+    )
   }
 
   get height() {
-    return this.graphContext.canvas.clientHeight * this.pixelRatio
+    return (
+      this.graphContext.canvas.clientHeight *
+      this.getPixelRatio(this.graphContext)
+    )
   }
 
   get canvasRect() {
@@ -148,19 +164,24 @@ export default abstract class Graph {
   }
 
   rescale(ctx: CanvasRenderingContext2D) {
-    var width = this.width * this.pixelRatio
-    var height = this.height * this.pixelRatio
+    let pixelRatio = this.getPixelRatio(ctx)
+    let width = ctx.canvas.clientWidth * pixelRatio
+    let height = ctx.canvas.clientHeight * pixelRatio
     if (width != ctx.canvas.width) ctx.canvas.width = width
     if (height != ctx.canvas.height) ctx.canvas.height = height
 
-    ctx.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0)
+    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
   }
 
-  getSharpPixel(pos: number, thickness: number = 1): number {
+  getSharpPixel(
+    pos: number,
+    ctx: CanvasRenderingContext2D,
+    thickness: number = 1
+  ): number {
     if (thickness % 2 == 0) {
       return pos
     }
-    return pos + this.pixelRatio / 2
+    return pos + this.getPixelRatio(ctx) / 2
   }
 
   getPixelRatio(context: any) {
@@ -177,11 +198,11 @@ export default abstract class Graph {
   }
 
   moveTo(x: number, y: number, ctx: CanvasRenderingContext2D) {
-    ctx.moveTo(this.getSharpPixel(x), this.getSharpPixel(y))
+    ctx.moveTo(this.getSharpPixel(x, ctx), this.getSharpPixel(y, ctx))
   }
 
   lineTo(x: number, y: number, ctx: CanvasRenderingContext2D) {
-    ctx.lineTo(this.getSharpPixel(x), this.getSharpPixel(y))
+    ctx.lineTo(this.getSharpPixel(x, ctx), this.getSharpPixel(y, ctx))
   }
 
   rect(
@@ -191,12 +212,16 @@ export default abstract class Graph {
     h: number,
     ctx: CanvasRenderingContext2D
   ) {
-    let getPx = this.getSharpPixel.bind(this)
-    ctx.rect(getPx(x), getPx(y), getPx(w), getPx(h))
+    ctx.rect(
+      this.getSharpPixel(x, ctx),
+      this.getSharpPixel(y, ctx),
+      this.getSharpPixel(w, ctx),
+      this.getSharpPixel(h, ctx)
+    )
   }
 
-  clear() {
-    this.graphContext.clearRect(0, 0, this.width, this.height)
+  clear(ctx: CanvasRenderingContext2D) {
+    ctx.clearRect(0, 0, this.getWidth(ctx), this.getHeight(ctx))
   }
 
   error(msg: string) {

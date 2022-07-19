@@ -17,6 +17,8 @@ export class CandlesGraph extends Graph {
   private pointerIsVisible = false
   private panningIsActive = false
   private candlesSpace = 0
+  private yZoomFactor = 1.2
+  private isZoomingYAxis = false
 
   private mousePosition = { x: 0, y: 0 }
 
@@ -138,9 +140,20 @@ export class CandlesGraph extends Graph {
     this.draw()
   }
 
-  yAxisWheelHandler(e: any) {
-    let wd = e.wheelDeltaY
-    this.zoomYAxis(wd > 1 ? 1 : -1)
+  yAxisMouseMoveHandler(e?: MouseEvent): void {
+    if (this.isZoomingYAxis && e?.movementY) {
+      let f = this.yZoomFactor
+      f += (e?.movementY / 300) * f
+      this.yZoomFactor = f
+      this.draw(true)
+    }
+  }
+
+  yAxisMouseDownHandler(e?: MouseEvent): void {
+    this.isZoomingYAxis = true
+  }
+  yAxisMouseUpHandler(e?: MouseEvent): void {
+    this.isZoomingYAxis = false
   }
 
   draw(updateGraphData?: boolean) {
@@ -165,7 +178,7 @@ export class CandlesGraph extends Graph {
     this.GRAPH_RIGHT += ((this.GRAPH_RIGHT - mx) / d) * side
     this.GRAPH_LEFT += ((this.GRAPH_LEFT - mx) / d) * side
 
-    this.clampPanning()
+    this.clampXPanning()
 
     this.graphData = this.normalizeData()
   }
@@ -177,12 +190,12 @@ export class CandlesGraph extends Graph {
     this.GRAPH_LEFT += movement
     this.GRAPH_RIGHT += movement
 
-    this.clampPanning()
+    this.clampXPanning()
 
     this.graphData = this.normalizeData()
   }
 
-  clampPanning() {
+  clampXPanning() {
     if (this.GRAPH_LEFT > 0) this.GRAPH_LEFT = 0
     if (this.GRAPH_RIGHT < this.width - 200) this.GRAPH_RIGHT = this.width - 200
   }
@@ -190,7 +203,6 @@ export class CandlesGraph extends Graph {
   filterVisiblePoints(data: any[]) {
     return data.filter((_, i) => {
       let x: number = this.GRAPH_LEFT + (this.floatingWidth / data.length) * i
-
       return x > 0 && x < this.width
     })
   }
@@ -232,43 +244,79 @@ export class CandlesGraph extends Graph {
 
   mainDebug() {
     let ctx = this.graphContext
-    let top = this.topHistoryPrice[1]
-    let bottom = this.bottomHistoryPrice[1]
+    let yAxisCtx = this.yAxisContext
 
-    ctx.strokeStyle = '#ffffff22'
+    let segments = 20,
+      h = this.height,
+      w = this.width
 
-    let h = this.height
-    let normalize = (y: number) => ((y - bottom) / (top - bottom)) * h
+    let t = this.topHistoryPrice[1]
+    let b = this.bottomHistoryPrice[1]
+
+    let r = 1,
+      tr = 0,
+      br = 0
+
+    let round = (n: number) => Math.round(n / r) * r
+
+    while (tr == br) {
+      tr = round(t)
+      br = round(b)
+      if (tr == br) r += 10
+    }
+
+    let normalize = (y: number) => ((y - br) / (tr - br)) * h
     let reverse = (y: number) => h - y
 
     let convert = (y: number) => reverse(normalize(y))
 
-    top = convert(top)
-    bottom = convert(bottom)
-
-    let hh = Math.abs((bottom - top) / 2)
-
-    let k = 2
-    top = (top - hh) / k + hh
-    bottom = (bottom - hh) / k + hh
-
+    this.clear(yAxisCtx)
     ctx.beginPath()
 
-    let segments = 5
+    ctx.strokeStyle = '#eee'
 
-    let space = (bottom - top) / segments
+    tr = convert(tr)
+    br = convert(br)
 
-    for (let i = -3; i <= segments + 3; i++) {
-      let y = top + space * i
-      this.moveTo(0, y, ctx)
-      this.lineTo(this.width, y, ctx)
+    let hh = Math.abs((tr - br) / 2)
+
+    let k = Math.abs(this.yZoomFactor)
+
+    tr = (tr - hh) / k + hh
+    br = (br - hh) / k + hh
+
+    let step = (tr - br) / segments
+
+    while (step > -30) {
+      segments -= segments / 5
+      step = (tr - br) / segments
+    }
+
+    while (step < -80) {
+      segments += segments / 5
+      step = (tr - br) / segments
+    }
+
+    let segmentsOut = 0
+
+    while (tr > segmentsOut * Math.abs(step)) {
+      segmentsOut++
+    }
+
+    for (let i = segments + segmentsOut; i >= -segmentsOut; i--) {
+      let y = i * step
+      this.moveTo(0, y + br, ctx)
+      this.lineTo(w, y + br, ctx)
+
+      let fz = 11
+      yAxisCtx.font = fz + 'px Verdana'
+      let price = i * ((t - b) / segments)
+      yAxisCtx.fillText(round(price + b).toFixed(2), 0, y + br - 2 + fz / 2)
     }
 
     ctx.stroke()
-    ctx.closePath()
 
-    this.debug(top, 100, 300)
-    this.debug(bottom, 100, 380)
+    ctx.closePath()
   }
 
   drawGraph(updateGraphData?: boolean) {
@@ -361,11 +409,8 @@ export class CandlesGraph extends Graph {
 
     if (!hist?.length) return []
 
-    // let top = this.GRAPH_TOP
-    // let bottom = this.GRAPH_BOTTOM
-
-    let h = this.height
     let result = hist?.map((n) => ({ ...n }))
+    let h = this.height
 
     let min = this.bottomHistoryPrice[1]
     let max = this.topHistoryPrice[1]
@@ -374,10 +419,6 @@ export class CandlesGraph extends Graph {
     let reverse = (y: number) => h - y
 
     let convert = (y: number) => reverse(normalize(y))
-
-    // let height = bottom - top
-    // let normalize = (y: number) =>
-    //   ((h - ((y - min) / (max - min)) * h) / h) * height + top * 2
 
     for (let i = 0; i < hist.length; i++) {
       result[i].close = convert(result[i].close)
@@ -393,7 +434,7 @@ export class CandlesGraph extends Graph {
 
     result = result.map((point) => {
       let p = Object.create(point)
-      let k = 1.2
+      let k = Math.abs(this.yZoomFactor)
       p.close = (p.close - hh) / k + hh
       p.open = (p.open - hh) / k + hh
       p.high = (p.high - hh) / k + hh
