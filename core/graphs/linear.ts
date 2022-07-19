@@ -1,5 +1,4 @@
 import {
-  TContainer,
   TLinearGraphOptions,
   TLinearHistory,
   TLinearGraphData,
@@ -18,7 +17,7 @@ export class LinearGraph extends Graph {
   private CHART_GRADIENT: CanvasGradient | undefined
 
   private GRAPH_LEFT = 0
-  private GRAPH_RIGHT = this.WIDTH
+  private GRAPH_RIGHT = this.width
 
   private pointerYPosIndex = 4
   private pointerIsVisible = false
@@ -30,7 +29,7 @@ export class LinearGraph extends Graph {
   private graphData: TLinearGraphData | undefined
 
   constructor(
-    container: TContainer,
+    container: HTMLElement | string,
     data?: TLinearHistory,
     opts?: TLinearGraphOptions
   ) {
@@ -58,11 +57,11 @@ export class LinearGraph extends Graph {
       let { gradientStart, gradientEnd } = opts.graphFill
 
       if (gradientStart && gradientEnd) {
-        this.CHART_GRADIENT = this.context.createLinearGradient(
+        this.CHART_GRADIENT = this.graphContext.createLinearGradient(
           0,
           0,
           0,
-          this.HEIGHT
+          this.height
         )
         this.CHART_GRADIENT.addColorStop(0, gradientStart)
         this.CHART_GRADIENT.addColorStop(1, gradientEnd)
@@ -80,7 +79,7 @@ export class LinearGraph extends Graph {
   }
 
   get graphDataWithPadding() {
-    let hh = this.HEIGHT / 2
+    let hh = this.height / 2
     return this.visibleGraphData?.map((y) => (y - hh) / 1.5 + hh)
   }
 
@@ -122,7 +121,7 @@ export class LinearGraph extends Graph {
     let max = this.topHistoryPrice[1]
     let min = this.bottomHistoryPrice[1]
 
-    let h = this.HEIGHT
+    let h = this.height
     let y = h - ((value - min) / (max - min)) * (h || 1)
 
     return (y - h / 2) / 1.5 + h / 2
@@ -173,7 +172,7 @@ export class LinearGraph extends Graph {
   }
 
   draw(updateGraphData?: boolean) {
-    this.context.clearRect(0, 0, this.WIDTH, this.HEIGHT)
+    this.graphContext.clearRect(0, 0, this.width, this.height)
 
     this.drawGrid(this.CHART_PRICE_SEGMENTS)
     this.drawGraph(updateGraphData)
@@ -191,7 +190,7 @@ export class LinearGraph extends Graph {
   }
 
   moveGraph(movement: number) {
-    if (this.GRAPH_RIGHT == this.WIDTH - 200 && movement < 0) return
+    if (this.GRAPH_RIGHT == this.width - 200 && movement < 0) return
     if (this.GRAPH_LEFT == 0 && movement > 0) return
 
     this.GRAPH_LEFT += movement
@@ -202,7 +201,7 @@ export class LinearGraph extends Graph {
 
   clampGraph() {
     if (this.GRAPH_LEFT > 0) this.GRAPH_LEFT = 0
-    if (this.GRAPH_RIGHT < this.WIDTH - 200) this.GRAPH_RIGHT = this.WIDTH - 200
+    if (this.GRAPH_RIGHT < this.width - 200) this.GRAPH_RIGHT = this.width - 200
   }
 
   movePointer() {
@@ -222,7 +221,7 @@ export class LinearGraph extends Graph {
   drawPointer() {
     if (!this.graphData?.length || !this.pointerIsVisible) return
 
-    let ctx = this.context
+    let ctx = this.graphContext
     let history = this.graphDataWithPadding!
     let x =
       this.GRAPH_LEFT +
@@ -243,7 +242,7 @@ export class LinearGraph extends Graph {
 
     ctx.beginPath() // pointer vertical line
     ctx.moveTo(x, 0)
-    ctx.lineTo(x, this.HEIGHT)
+    ctx.lineTo(x, this.height)
     ctx.strokeStyle = '#ffffff33'
     let prevLineWidth = ctx.lineWidth
     ctx.lineWidth = 1
@@ -275,14 +274,14 @@ export class LinearGraph extends Graph {
       return
     }
 
-    let ctx = this.context
+    let ctx = this.graphContext
 
     ctx.beginPath()
 
     ctx.strokeStyle = this.CHART_STROKE_COLOR
     ctx.lineWidth = this.CHART_CURRENT_STROKE_WIDTH || this.CHART_STROKE_WIDTH
 
-    ctx.moveTo(this.GRAPH_LEFT - 10, this.HEIGHT)
+    ctx.moveTo(this.GRAPH_LEFT - 10, this.height)
     ctx.lineTo(this.GRAPH_LEFT - 10, data[0])
 
     for (let i = 0; i < data.length; i++) {
@@ -292,8 +291,8 @@ export class LinearGraph extends Graph {
       ctx.lineTo(x, y)
     }
 
-    ctx.lineTo(this.WIDTH + 10, data[data.length - 1])
-    ctx.lineTo(this.WIDTH + 10, this.HEIGHT + 1)
+    ctx.lineTo(this.width + 10, data[data.length - 1])
+    ctx.lineTo(this.width + 10, this.height + 1)
 
     ctx.fillStyle = this.CHART_GRADIENT || ''
 
@@ -304,7 +303,7 @@ export class LinearGraph extends Graph {
   }
 
   drawGrid(segments: number) {
-    let ctx = this.context
+    let ctx = this.graphContext
 
     let top, bottom
 
@@ -317,7 +316,7 @@ export class LinearGraph extends Graph {
     let interval = (bottom - top) / segments
 
     ctx.strokeStyle = '#ffffff22'
-    ctx.strokeRect(0, 0, this.WIDTH, this.HEIGHT)
+    ctx.strokeRect(0, 0, this.width, this.height)
 
     ctx.beginPath()
 
@@ -325,12 +324,12 @@ export class LinearGraph extends Graph {
       let y = i * interval + top
 
       ctx.fillStyle = '#ffffff44'
-      ctx.fillText(y.toString(), this.WIDTH - 35, this.normalizeToGraphY(y) - 5)
+      ctx.fillText(y.toString(), this.width - 35, this.normalizeToGraphY(y) - 5)
 
       y = this.normalizeToGraphY(y)
 
       ctx.moveTo(0, y)
-      ctx.lineTo(this.WIDTH, y)
+      ctx.lineTo(this.width, y)
     }
 
     ctx.strokeStyle = '#ffffff33'
@@ -347,7 +346,7 @@ export class LinearGraph extends Graph {
   }
 
   normalizeData() {
-    let h = this.HEIGHT
+    let h = this.height
     let hist = this.history!
     let result = []
 
