@@ -24,6 +24,8 @@ export class CandlesGraph extends Graph {
 
   private history: TCandlesHistory | undefined
   private graphData: TCandlesHistory | undefined
+  private topHistoryPrice: [number, number] = [0, 0]
+  private bottomHistoryPrice: [number, number] = [0, 0]
 
   constructor(
     container: HTMLElement | string,
@@ -55,7 +57,7 @@ export class CandlesGraph extends Graph {
     }
   }
 
-  get topHistoryPrice() {
+  getTopHistoryPrice(): [number, number] {
     let history = this.filterVisiblePoints(
       this.history!.map(({ high }) => high)
     )
@@ -70,10 +72,12 @@ export class CandlesGraph extends Graph {
       }
     })
 
-    return [i, max]
+    this.topHistoryPrice = [i, max]
+
+    return this.topHistoryPrice
   }
 
-  get bottomHistoryPrice() {
+  getBottomHistoryPrice(): [number, number] {
     let history = this.filterVisiblePoints(this.history!.map(({ low }) => low))
 
     let min = history[0]
@@ -86,7 +90,9 @@ export class CandlesGraph extends Graph {
       }
     })
 
-    return [i, min]
+    this.bottomHistoryPrice = [i, min]
+
+    return this.bottomHistoryPrice
   }
 
   get floatingWidth() {
@@ -103,6 +109,7 @@ export class CandlesGraph extends Graph {
 
     this.movePointer()
     this.draw()
+    this.drawPricePointer()
   }
 
   mouseEnterHandler() {
@@ -138,6 +145,7 @@ export class CandlesGraph extends Graph {
     this.zoomGraph(wd > 1 ? 1 : -1)
     this.movePointer()
     this.draw()
+    this.drawPricePointer()
   }
 
   yAxisMouseMoveHandler(e?: MouseEvent): void {
@@ -154,15 +162,6 @@ export class CandlesGraph extends Graph {
   }
   yAxisMouseUpHandler(e?: MouseEvent): void {
     this.isZoomingYAxis = false
-  }
-
-  draw(updateGraphData?: boolean) {
-    this.graphContext.clearRect(0, 0, this.width, this.height)
-
-    this.mainDebug()
-    this.drawGrid()
-    this.drawGraph(updateGraphData)
-    this.drawPointer()
   }
 
   zoomYAxis(side: number) {
@@ -221,6 +220,17 @@ export class CandlesGraph extends Graph {
       i > data.length - 1 ? data.length - 1 : i < 0 ? 0 : i
   }
 
+  draw(updateGraphData?: boolean) {
+    this.graphContext.clearRect(0, 0, this.width, this.height)
+
+    this.drawGraph(updateGraphData)
+    this.drawPointer()
+
+    this.drawYAxis()
+    this.drawXAxis()
+    this.mainDebug()
+  }
+
   drawPointer() {
     if (!this.graphData?.length || !this.pointerIsVisible) return
 
@@ -242,9 +252,45 @@ export class CandlesGraph extends Graph {
     ctx.setLineDash([])
   }
 
-  mainDebug() {
+  drawPricePointer() {
+    let ctx = this.yAxisContext
+    let y = this.mousePosition.y - this.canvasRect.top
+
+    let h = this.height
+    let t = this.topHistoryPrice[1]
+    let b = this.bottomHistoryPrice[1]
+
+    let normalize = (y: number) => ((y - b) / (t - b)) * h
+    let reverse = (y: number) => h - y
+
+    let convert = (y: number) => reverse(normalize(y))
+
+    let price = (y / h) * (b - t) + t
+
+    ctx.beginPath()
+    ctx.fillStyle = '#707588'
+    this.rect(0, y - 10, this.getWidth(ctx), 20, ctx)
+    ctx.fill()
+    ctx.closePath()
+    ctx.fillStyle = 'white'
+    ctx.font = '11px Verdana'
+    ctx.fillText(price.toFixed(2), 10, y + 5.5)
+  }
+
+  mainDebug() {}
+
+  drawXAxis() {}
+
+  drawYAxis() {
     let ctx = this.graphContext
     let yAxisCtx = this.yAxisContext
+
+    yAxisCtx.clearRect(
+      0,
+      0,
+      yAxisCtx.canvas.clientWidth,
+      yAxisCtx.canvas.clientHeight
+    )
 
     let segments = 20,
       h = this.height,
@@ -273,7 +319,7 @@ export class CandlesGraph extends Graph {
     this.clear(yAxisCtx)
     ctx.beginPath()
 
-    ctx.strokeStyle = '#eee'
+    ctx.strokeStyle = '#7777aa33'
 
     tr = convert(tr)
     br = convert(br)
@@ -309,13 +355,13 @@ export class CandlesGraph extends Graph {
       this.lineTo(w, y + br, ctx)
 
       let fz = 11
+      yAxisCtx.fillStyle = '#9999ccee'
       yAxisCtx.font = fz + 'px Verdana'
       let price = i * ((t - b) / segments)
-      yAxisCtx.fillText(round(price + b).toFixed(2), 0, y + br - 2 + fz / 2)
+      yAxisCtx.fillText(round(price + b).toFixed(2), 10, y + br - 2 + fz / 2)
     }
 
     ctx.stroke()
-
     ctx.closePath()
   }
 
@@ -375,30 +421,6 @@ export class CandlesGraph extends Graph {
     }
   }
 
-  drawGrid() {
-    let ctx = this.graphContext
-
-    let interval = 10
-    let h = this.height
-    let bottom = this.bottomHistoryPrice[1]
-    let top = this.topHistoryPrice[1]
-
-    ctx.beginPath()
-
-    for (let i = 0; i < interval; i++) {
-      let y = ((bottom - top) / interval) * i
-      this.moveTo(0, y + top, ctx)
-      this.lineTo(this.width, y + top, ctx)
-    }
-
-    let c = ctx.strokeStyle
-    ctx.strokeStyle = '#00000022'
-    ctx.stroke()
-    ctx.strokeStyle = c
-
-    ctx.closePath()
-  }
-
   loadHistory(data: TCandlesHistory) {
     this.history = data
     this.draw(true)
@@ -412,8 +434,8 @@ export class CandlesGraph extends Graph {
     let result = hist?.map((n) => ({ ...n }))
     let h = this.height
 
-    let min = this.bottomHistoryPrice[1]
-    let max = this.topHistoryPrice[1]
+    let min = this.getBottomHistoryPrice()[1]
+    let max = this.getTopHistoryPrice()[1]
 
     let normalize = (y: number) => ((y - min) / (max - min)) * h
     let reverse = (y: number) => h - y
